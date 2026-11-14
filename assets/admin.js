@@ -17,7 +17,10 @@
   const set = (path, val) => {
     const keys = path.split(".");
     const last = keys.pop();
-    keys.reduce((o, k) => (o[k] ??= {}), data)[last] = val;
+    keys.reduce((o, k) => {
+      if (o[k] == null) o[k] = {};
+      return o[k];
+    }, data)[last] = val;
   };
   const toast = (msg, err = false) => {
     const el = document.createElement("div");
@@ -79,11 +82,38 @@
   };
 
   const normalize = (d) => {
-    d.tournament ??= {}; d.links ??= {};
-    d.prizes ??= []; d.schedule ??= []; d.results ??= []; d.sponsors ??= [];
-    d.tournament.state = STATES[d.tournament.state] ? d.tournament.state : "abierto";
+    const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+    const records = (v) => Array.isArray(v) ? v.filter(isObject) : [];
+    const text = (v) => typeof v === "string" ? v : "";
+    if (!isObject(d)) d = {};
+    if (!isObject(d.tournament)) d.tournament = {};
+    if (!isObject(d.links)) d.links = {};
+    d.prizes = records(d.prizes);
+    d.schedule = records(d.schedule);
+    d.results = records(d.results);
+    d.sponsors = records(d.sponsors);
+    d.tournament.state = Object.prototype.hasOwnProperty.call(STATES, d.tournament.state) ? d.tournament.state : "abierto";
     ["rulesText", "clarificationsText", "prohibitedText", "rulesNote"].forEach((k) => {
       if (typeof d.tournament[k] !== "string") d.tournament[k] = PYROCORE.DEFAULT_RULES[k];
+    });
+    d.schedule.forEach((m) => {
+      if (!m.id) m.id = uuid();
+      m.phase = text(m.phase) || PHASES[0];
+      m.group = text(m.group);
+    });
+    d.results.forEach((g) => {
+      if (!g.id) g.id = uuid();
+      g.phase = text(g.phase) || PHASES[0];
+      g.title = text(g.title);
+      g.rows = records(g.rows);
+      g.rows.forEach((r) => {
+        if (!r.id) r.id = uuid();
+        r.team = text(r.team);
+      });
+    });
+    d.sponsors.forEach((s) => {
+      if (!s.id) s.id = uuid();
+      s.name = text(s.name); s.logo = text(s.logo); s.url = text(s.url);
     });
     while (d.sponsors.length < SPONSOR_SLOTS) d.sponsors.push({ id: uuid(), name: "", logo: "", url: "" });
     return d;
@@ -637,9 +667,9 @@
     try {
       const t = data.tournament;
       ["teams", "groups", "teamsPerGroup"].forEach((k) => { t[k] = Number(t[k]) || 0; });
-      data.schedule.forEach((m) => { m.id ||= uuid(); });
-      data.results.forEach((g) => { g.id ||= uuid(); g.rows.forEach((r) => { r.id ||= uuid(); }); });
-      data.sponsors.forEach((x) => { x.id ||= uuid(); });
+      data.schedule.forEach((m) => { if (!m.id) m.id = uuid(); });
+      data.results.forEach((g) => { if (!g.id) g.id = uuid(); g.rows.forEach((r) => { if (!r.id) r.id = uuid(); }); });
+      data.sponsors.forEach((x) => { if (!x.id) x.id = uuid(); });
       await rpc("prc_staff_save", { p_data: { ...data, touched: [...touchedGroups] } });
 
       dirty = false;
