@@ -31,10 +31,18 @@
   badge.textContent = STATES[state];
   badge.className = `kicker state-${state}`;
 
+  // Resultados: solo se muestran cuando el cronograma tiene al menos una fecha
+  // en vivo o finalizada (antes de jugar no hay nada que publicar).
+  const played = (data.schedule || []).some((m) => m.visible !== false && (m.status === "envivo" || m.status === "finalizado"));
+  $("#resultados").hidden = !played;
+  document.querySelectorAll('.nav a[href="#resultados"]').forEach((a) => { a.hidden = !played; });
+
   const cta = [];
   if (state === "abierto" && safeUrl(L.registration)) cta.push(`<a class="btn" href="${esc(L.registration)}" target="_blank" rel="noopener">${ICONS.form} Inscribir equipo</a>`);
   if (safeUrl(L.infoGroup)) cta.push(`<a class="btn ${cta.length ? "ghost" : ""}" href="${esc(L.infoGroup)}" target="_blank" rel="noopener">${ICONS.whatsapp} Grupo de información</a>`);
-  cta.push(`<a class="btn ghost" href="#${state === "en_juego" || state === "finalizado" ? "resultados" : "calendario"}">${state === "en_juego" || state === "finalizado" ? "Ver resultados" : "Ver cronograma"}</a>`);
+  cta.push(played
+    ? `<a class="btn ghost" href="#resultados">Ver resultados</a>`
+    : `<a class="btn ghost" href="#calendario">Ver cronograma</a>`);
   $("#hero-cta").innerHTML = cta.join("");
 
   $("#stats").innerHTML = [
@@ -278,7 +286,7 @@
     $("#phase-tabs").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) renderPhase(b.dataset.phase); });
     renderPhase(resPhases[resPhases.length - 1]);
   } else {
-    $("#results").innerHTML = `<p class="empty">Los resultados se publicarán al iniciar la competencia.</p>`;
+    $("#results").innerHTML = `<p class="empty">Los resultados de la primera fecha se publicarán en breve.</p>`;
   }
 
   const social = [
