@@ -32,7 +32,15 @@
     $("#save-state").style.color = "#ffb547";
   };
   const touch = (gi) => { touchedGroups.add(data.results[gi].id); data.results[gi].updated = "ahora"; };
-  const uuid = () => crypto.randomUUID();
+  const uuid = () => {
+    if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    // Safari antiguo y contextos HTTP pueden carecer de randomUUID.
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  };
   const emptyRows = (n) => Array.from({ length: n }, () => ({ id: uuid(), team: "", kills: 0, placement: 0, penalty: 0 }));
   addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
 
