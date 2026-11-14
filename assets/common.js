@@ -31,11 +31,11 @@ const PYROCORE = (() => {
 
   async function fetchFromSupabase(scheduleQuery) {
     const [settings, schedule, groups, rows, sponsors] = await Promise.all([
-      sb.from("settings").select("*").eq("id", 1).maybeSingle().then(must),
-      (scheduleQuery || sb.from("schedule").select("*").order("position")).then(must),
-      sb.from("result_groups").select("*").order("position").then(must),
-      sb.from("result_rows").select("*").order("position").then(must),
-      sb.from("sponsors").select("*").order("position").then(must),
+      sb.from("prc_settings").select("*").eq("id", 1).maybeSingle().then(must),
+      (scheduleQuery || sb.from("prc_schedule").select("*").order("position")).then(must),
+      sb.from("prc_result_groups").select("*").order("position").then(must),
+      sb.from("prc_result_rows").select("*").order("position").then(must),
+      sb.from("prc_sponsors").select("*").order("position").then(must),
     ]);
     const fmt = (d) => (d ? new Date(d).toLocaleString("es", { dateStyle: "medium", timeStyle: "short" }) : "");
     return {
@@ -56,7 +56,10 @@ const PYROCORE = (() => {
   }
 
   async function loadData() {
-    if (sb) return fetchFromSupabase();
+    if (sb) {
+      try { return await fetchFromSupabase(); }
+      catch (err) { console.warn("Supabase no respondió, uso data.json:", err.message); }
+    }
     const res = await fetch(`data.json?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error("No se pudo cargar data.json");
     return res.json();

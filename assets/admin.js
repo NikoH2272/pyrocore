@@ -36,7 +36,10 @@
   const emptyRows = (n) => Array.from({ length: n }, () => ({ id: uuid(), team: "", kills: 0, placement: 0, penalty: 0 }));
   addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
 
-  const uploadImage = (file, max) => new Promise((resolve, reject) => {
+  // Reduce la imagen a `max` px (WebP) y la sube a Supabase Storage mediante la
+  // función pyrocore-upload, que valida la sesión del staff. Devuelve la URL
+  // pública: en la base de datos solo se guarda el enlace, nunca base64.
+  const shrink = (file, max) => new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const k = Math.min(1, max / Math.max(img.width, img.height));
@@ -45,11 +48,27 @@
       c.height = Math.round(img.height * k);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(img.src);
-      resolve(c.toDataURL("image/webp", 0.82));
+      c.toBlob((b) => (b ? resolve(b) : reject(new Error("No se pudo procesar la imagen"))), "image/webp", 0.85);
     };
     img.onerror = () => reject(new Error("Formato de imagen no soportado"));
     img.src = URL.createObjectURL(file);
   });
+  const uploadImage = async (file, max, folder) => {
+    const blob = await shrink(file, max);
+    const cfg = window.PYROCORE_CONFIG;
+    const form = new FormData();
+    form.append("token", token);
+    form.append("folder", folder);
+    form.append("file", blob, `img.${blob.type === "image/webp" ? "webp" : "png"}`);
+    const res = await fetch(`${cfg.supabaseUrl.replace(/\/$/, "")}/functions/v1/pyrocore-upload`, {
+      method: "POST",
+      headers: { apikey: cfg.supabaseAnonKey, Authorization: `Bearer ${cfg.supabaseAnonKey}` },
+      body: form,
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok || !out.url) throw new Error(out.error || `Error al subir (${res.status})`);
+    return out.url;
+  };
 
   const normalize = (d) => {
     d.tournament ??= {}; d.links ??= {};
@@ -93,7 +112,7 @@
     const btn = $("#login-btn");
     btn.disabled = true;
     try {
-      const res = must(await sb.rpc("staff_login", { p_username: $("#un").value.trim(), p_password: $("#pw").value }));
+      const res = must(await sb.rpc("prc_staff_login", { p_username: $("#un").value.trim(), p_password: $("#pw").value }));
       setToken(res.token);
       me = res.user;
       $("#pw").value = "";
@@ -111,25 +130,25 @@
     const pw = prompt("Nueva clave (mínimo 6 caracteres):");
     if (!pw) return;
     if (pw !== prompt("Repite la nueva clave:")) return toast("Las claves no coinciden", true);
-    try { await rpc("staff_change_password", { p_old: old, p_new: pw }); toast("Clave actualizada ✓"); }
+    try { await rpc("prc_staff_change_password", { p_old: old, p_new: pw }); toast("Clave actualizada ✓"); }
     catch (err) { toast(err.message, true); }
   });
 
   $("#logout").addEventListener("click", async () => {
     if (dirty && !confirm("Tienes cambios sin guardar. ¿Salir igual?")) return;
     dirty = false;
-    try { await rpc("staff_logout"); } catch (_) {}
+    try { await rpc("prc_staff_logout"); } catch (_) {}
     setToken(null);
     location.reload();
   });
 
-  const loadAll = () => PYROCORE.fetchFromSupabase(sb.rpc("staff_schedule", { p_token: token }));
+  const loadAll = () => PYROCORE.fetchFromSupabase(sb.rpc("prc_staff_schedule", { p_token: token }));
   const expired = (err) => /Sesión vencida/.test(err.message);
 
   (async () => {
     if (!token) return showLogin();
     try {
-      me = await rpc("staff_me");
+      me = await rpc("prc_staff_me");
       await boot();
     } catch (_) {
       setToken(null);
@@ -341,11 +360,11 @@
           <div><b>#${i + 1}</b>${s.logo ? ` <button class="btn danger sm" data-clearlogo="${i}" style="margin-left:6px">Quitar logo</button>` : ""}</div>
         </div>
         ${input(`sponsors.${i}.name`, "Nombre")}
+        <div class="field"><label>Subir logo (PNG sin fondo ideal)</label><input type="file" accept="image/png,image/webp,image/jpeg" data-logo="${i}"></div>
         ${(s.logo || "").startsWith("data:")
-          ? `<div class="field"><label>Logo</label><p class="hint" style="margin:0">Imagen subida desde el admin</p></div>`
-          : input(`sponsors.${i}.logo`, "Logo (archivo o URL)", { ph: "assets/sponsors/logo.png" })}
-        ${input(`sponsors.${i}.url`, "Enlace (opcional)", { ph: "https://instagram.com/…" })}
-        <div class="field"><label>…o subir logo</label><input type="file" accept="image/*" data-logo="${i}"></div>
+          ? `<p class="hint" style="margin:0 0 14px;color:#ffb547">Logo antiguo guardado como base64: vuelve a subirlo para pasarlo a Storage.</p>`
+          : input(`sponsors.${i}.logo`, "…o enlace del logo", { ph: "https://…" })}
+        ${input(`sponsors.${i}.url`, "Enlace del sponsor (opcional)", { ph: "https://instagram.com/…" })}
       </div>`).join("");
   }
 
@@ -353,7 +372,7 @@
     const table = $("#users-table");
     table.innerHTML = `<tr><td class="hint">Cargando…</td></tr>`;
     try {
-      const users = await rpc("staff_list_users");
+      const users = await rpc("prc_staff_list_users");
       table.innerHTML = `<thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Alta</th><th></th></tr></thead><tbody>${users.map((u) => {
         const self = u.id === me.id;
         return `<tr>
@@ -378,7 +397,7 @@
     e.preventDefault();
     const f = new FormData(e.target);
     try {
-      await rpc("staff_create_user", {
+      await rpc("prc_staff_create_user", {
         p_username: f.get("username"), p_password: f.get("password"), p_display_name: f.get("display_name"), p_role: f.get("role"),
       });
       toast(`Usuario ${f.get("username").toLowerCase()} creado`);
@@ -461,7 +480,7 @@
     if (el.dataset.role) {
       const role = el.value;
       if (!confirm(`¿Cambiar el rol a "${role}"?`)) return renderUsers();
-      try { await rpc("staff_update_user", { p_id: el.dataset.role, p_role: role, p_password: null }); toast("Rol actualizado"); }
+      try { await rpc("prc_staff_update_user", { p_id: el.dataset.role, p_role: role, p_password: null }); toast("Rol actualizado"); }
       catch (err) { toast(err.message, true); }
       renderUsers();
       return;
@@ -481,14 +500,16 @@
       el.disabled = true;
       try {
         if (el.id === "hero-file") {
-          data.tournament.heroImage = await uploadImage(el.files[0], 1000);
+          toast("Subiendo imagen…");
+          data.tournament.heroImage = await uploadImage(el.files[0], 1200, "hero");
           $("#hero-prev").src = data.tournament.heroImage; $("#hero-prev").hidden = false;
         } else {
-          data.sponsors[el.dataset.logo].logo = await uploadImage(el.files[0], 320);
+          toast("Subiendo logo…");
+          data.sponsors[el.dataset.logo].logo = await uploadImage(el.files[0], 400, "sponsors");
           renderSponsors();
         }
         markDirty();
-        toast("Imagen lista. Pulsa Guardar cambios.");
+        toast("Imagen subida. Pulsa Guardar cambios.");
       } catch (err) {
         toast("No se pudo leer la imagen: " + (err.message || err), true);
       } finally { el.disabled = false; }
@@ -502,13 +523,13 @@
     if (d.resetpw) {
       const pw = prompt(`Nueva clave para ${d.name} (mínimo 6 caracteres):`);
       if (!pw) return;
-      try { await rpc("staff_update_user", { p_id: d.resetpw, p_role: d.urole, p_password: pw }); toast(`Clave de ${d.name} actualizada`); }
+      try { await rpc("prc_staff_update_user", { p_id: d.resetpw, p_role: d.urole, p_password: pw }); toast(`Clave de ${d.name} actualizada`); }
       catch (err) { toast(err.message, true); }
       return;
     }
     if (d.deluser) {
       if (!confirm(`¿Eliminar el usuario ${d.name}?`)) return;
-      try { await rpc("staff_delete_user", { p_id: d.deluser }); toast("Usuario eliminado"); renderUsers(); }
+      try { await rpc("prc_staff_delete_user", { p_id: d.deluser }); toast("Usuario eliminado"); renderUsers(); }
       catch (err) { toast(err.message, true); }
       return;
     }
@@ -611,7 +632,7 @@
       data.schedule.forEach((m) => { m.id ||= uuid(); });
       data.results.forEach((g) => { g.id ||= uuid(); g.rows.forEach((r) => { r.id ||= uuid(); }); });
       data.sponsors.forEach((x) => { x.id ||= uuid(); });
-      await rpc("staff_save", { p_data: { ...data, touched: [...touchedGroups] } });
+      await rpc("prc_staff_save", { p_data: { ...data, touched: [...touchedGroups] } });
 
       dirty = false;
       touchedGroups.clear();

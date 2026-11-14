@@ -1,5 +1,7 @@
 -- ============================================================
 -- PYROCORE LEAGUE S1 — Supabase Schema
+-- Todo lleva prefijo prc_ para convivir en la misma base con otros
+-- proyectos (p. ej. DFS League) sin compartir ni pisar tablas o funciones.
 -- Ejecuta esto en el SQL Editor de tu proyecto en supabase.com
 -- ============================================================
 
@@ -7,17 +9,17 @@
 create extension if not exists "pgcrypto";
 
 -- ── Tabla de configuración general ──────────────────────────
-create table if not exists settings (
+create table if not exists prc_settings (
   id         integer primary key default 1,
   tournament jsonb    not null default '{}',
   links      jsonb    not null default '{}',
   prizes     jsonb    not null default '[]',
   constraint single_row check (id = 1)
 );
-insert into settings(id) values(1) on conflict do nothing;
+insert into prc_settings(id) values(1) on conflict do nothing;
 
 -- ── Staff ────────────────────────────────────────────────────
-create table if not exists staff_users (
+create table if not exists prc_staff_users (
   id           uuid    primary key default gen_random_uuid(),
   username     text    not null unique,
   display_name text,
@@ -26,15 +28,15 @@ create table if not exists staff_users (
   created_at   timestamptz not null default now()
 );
 
-create table if not exists staff_sessions (
+create table if not exists prc_staff_sessions (
   token      text        primary key,
-  user_id    uuid        not null references staff_users(id) on delete cascade,
+  user_id    uuid        not null references prc_staff_users(id) on delete cascade,
   expires_at timestamptz not null default (now() + interval '7 days'),
   created_at timestamptz not null default now()
 );
 
 -- ── Cronograma ───────────────────────────────────────────────
-create table if not exists schedule (
+create table if not exists prc_schedule (
   id         uuid        primary key default gen_random_uuid(),
   phase      text        not null,
   group_name text        not null default '',
@@ -48,7 +50,7 @@ create table if not exists schedule (
 );
 
 -- ── Grupos de resultados ─────────────────────────────────────
-create table if not exists result_groups (
+create table if not exists prc_result_groups (
   id         uuid        primary key default gen_random_uuid(),
   phase      text        not null,
   title      text        not null,
@@ -59,9 +61,9 @@ create table if not exists result_groups (
 );
 
 -- ── Filas de resultados (kills + P.P + sanciones) ────────────
-create table if not exists result_rows (
+create table if not exists prc_result_rows (
   id         uuid    primary key default gen_random_uuid(),
-  group_id   uuid    not null references result_groups(id) on delete cascade,
+  group_id   uuid    not null references prc_result_groups(id) on delete cascade,
   team       text    not null default '',
   kills      integer not null default 0,
   placement  integer not null default 0,
@@ -70,7 +72,7 @@ create table if not exists result_rows (
 );
 
 -- ── Sponsors ─────────────────────────────────────────────────
-create table if not exists sponsors (
+create table if not exists prc_sponsors (
   id         uuid    primary key default gen_random_uuid(),
   name       text    not null default '',
   logo_url   text    not null default '',
@@ -81,38 +83,57 @@ create table if not exists sponsors (
 -- ============================================================
 -- RLS (Row Level Security) — lectura pública, escritura solo staff
 -- ============================================================
-alter table settings      enable row level security;
-alter table staff_users   enable row level security;
-alter table staff_sessions enable row level security;
-alter table schedule      enable row level security;
-alter table result_groups enable row level security;
-alter table result_rows   enable row level security;
-alter table sponsors      enable row level security;
+alter table prc_settings      enable row level security;
+alter table prc_staff_users   enable row level security;
+alter table prc_staff_sessions enable row level security;
+alter table prc_schedule      enable row level security;
+alter table prc_result_groups enable row level security;
+alter table prc_result_rows   enable row level security;
+alter table prc_sponsors      enable row level security;
 
 -- Lectura pública
-create policy "public_read_settings"       on settings      for select using (true);
-create policy "public_read_schedule"       on schedule      for select using (visible = true);
-create policy "public_read_result_groups"  on result_groups for select using (true);
-create policy "public_read_result_rows"    on result_rows   for select using (true);
-create policy "public_read_sponsors"       on sponsors      for select using (true);
+drop policy if exists "prc_read_settings" on prc_settings;
+create policy "prc_read_settings" on prc_settings      for select using (true);
+drop policy if exists "prc_read_schedule" on prc_schedule;
+create policy "prc_read_schedule" on prc_schedule      for select using (visible = true);
+drop policy if exists "prc_read_result_groups" on prc_result_groups;
+create policy "prc_read_result_groups" on prc_result_groups for select using (true);
+drop policy if exists "prc_read_result_rows" on prc_result_rows;
+create policy "prc_read_result_rows" on prc_result_rows   for select using (true);
+drop policy if exists "prc_read_sponsors" on prc_sponsors;
+create policy "prc_read_sponsors" on prc_sponsors      for select using (true);
 
 -- ============================================================
 -- Funciones de staff (autenticación + CRUD)
 -- ============================================================
 
+-- Borra versiones anteriores de las funciones de PYROCORE (solo prc_*; las
+-- de otros proyectos en esta misma base, como DFS, no se tocan).
+drop function if exists prc_staff_login(text, text);
+drop function if exists prc_staff_me(text);
+drop function if exists prc_staff_logout(text);
+drop function if exists prc_staff_schedule(text);
+drop function if exists prc_staff_save(text, jsonb);
+drop function if exists prc_staff_create_user(text, text, text, text, text);
+drop function if exists prc_staff_list_users(text);
+drop function if exists prc_staff_update_user(text, uuid, text, text);
+drop function if exists prc_staff_delete_user(text, uuid);
+drop function if exists prc_staff_change_password(text, text, text);
+drop function if exists prc_cleanup_sessions();
+
 -- ── Login ────────────────────────────────────────────────────
-create or replace function staff_login(p_username text, p_password text)
-returns json language plpgsql security definer as $$
+create or replace function prc_staff_login(p_username text, p_password text)
+returns json language plpgsql security definer set search_path = public, extensions as $$
 declare
-  v_user staff_users;
+  v_user prc_staff_users;
   v_token text;
 begin
-  select * into v_user from staff_users where username = lower(trim(p_username));
+  select * into v_user from prc_staff_users where username = lower(trim(p_username));
   if not found or v_user.password_hash <> crypt(p_password, v_user.password_hash) then
     raise exception 'Usuario o clave incorrectos';
   end if;
   v_token := encode(gen_random_bytes(32), 'hex');
-  insert into staff_sessions(token, user_id) values(v_token, v_user.id);
+  insert into prc_staff_sessions(token, user_id) values(v_token, v_user.id);
   return json_build_object('token', v_token, 'user', json_build_object(
     'id', v_user.id, 'username', v_user.username,
     'display_name', v_user.display_name, 'role', v_user.role
@@ -121,13 +142,13 @@ end;
 $$;
 
 -- ── Verificar sesión ─────────────────────────────────────────
-create or replace function staff_me(p_token text)
-returns json language plpgsql security definer as $$
+create or replace function prc_staff_me(p_token text)
+returns json language plpgsql security definer set search_path = public, extensions as $$
 declare
-  v_user staff_users;
+  v_user prc_staff_users;
 begin
   select u.* into v_user
-  from staff_sessions s join staff_users u on s.user_id = u.id
+  from prc_staff_sessions s join prc_staff_users u on s.user_id = u.id
   where s.token = p_token and s.expires_at > now();
   if not found then raise exception 'Sesión vencida. Inicia sesión de nuevo.'; end if;
   return json_build_object(
@@ -138,25 +159,25 @@ end;
 $$;
 
 -- ── Logout ───────────────────────────────────────────────────
-create or replace function staff_logout(p_token text)
-returns void language plpgsql security definer as $$
+create or replace function prc_staff_logout(p_token text)
+returns void language plpgsql security definer set search_path = public, extensions as $$
 begin
-  delete from staff_sessions where token = p_token;
+  delete from prc_staff_sessions where token = p_token;
 end;
 $$;
 
 -- ── Obtener cronograma (incluye fechas ocultas para el admin) ─
-create or replace function staff_schedule(p_token text)
-returns setof schedule language plpgsql security definer as $$
+create or replace function prc_staff_schedule(p_token text)
+returns setof prc_schedule language plpgsql security definer set search_path = public, extensions as $$
 begin
-  perform staff_me(p_token);
-  return query select * from schedule order by position;
+  perform prc_staff_me(p_token);
+  return query select * from prc_schedule order by position;
 end;
 $$;
 
 -- ── Guardar todo ─────────────────────────────────────────────
-create or replace function staff_save(p_token text, p_data jsonb)
-returns void language plpgsql security definer as $$
+create or replace function prc_staff_save(p_token text, p_data jsonb)
+returns void language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_user json;
   v_touched uuid[];
@@ -166,20 +187,20 @@ declare
   v_s jsonb;
   i integer;
 begin
-  v_user := staff_me(p_token);
+  v_user := prc_staff_me(p_token);
 
   -- settings
-  update settings set
+  update prc_settings set
     tournament = coalesce(p_data->'tournament', '{}'),
     links      = coalesce(p_data->'links', '{}'),
     prizes     = coalesce(p_data->'prizes', '[]')
   where id = 1;
 
   -- schedule
-  delete from schedule;
+  delete from prc_schedule;
   i := 0;
   for v_m in select * from jsonb_array_elements(coalesce(p_data->'schedule','[]')) loop
-    insert into schedule(id, phase, group_name, date, time, rooms, status, visible, note, position)
+    insert into prc_schedule(id, phase, group_name, date, time, rooms, status, visible, note, position)
     values (
       (v_m->>'id')::uuid,
       v_m->>'phase',
@@ -202,7 +223,7 @@ begin
   -- result groups & rows (only touched groups get rows updated)
   i := 0;
   for v_g in select * from jsonb_array_elements(coalesce(p_data->'results','[]')) loop
-    insert into result_groups(id, phase, title, kind, qualify, position, updated_at)
+    insert into prc_result_groups(id, phase, title, kind, qualify, position, updated_at)
     values (
       (v_g->>'id')::uuid,
       v_g->>'phase',
@@ -218,14 +239,14 @@ begin
       kind       = excluded.kind,
       qualify    = excluded.qualify,
       position   = excluded.position,
-      updated_at = case when (v_g->>'id')::uuid = any(v_touched) then now() else result_groups.updated_at end;
+      updated_at = case when (v_g->>'id')::uuid = any(v_touched) then now() else prc_result_groups.updated_at end;
 
     if (v_g->>'id')::uuid = any(v_touched) then
-      delete from result_rows where group_id = (v_g->>'id')::uuid;
+      delete from prc_result_rows where group_id = (v_g->>'id')::uuid;
       declare j integer := 0;
       begin
         for v_r in select * from jsonb_array_elements(coalesce(v_g->'rows','[]')) loop
-          insert into result_rows(id, group_id, team, kills, placement, penalty, position)
+          insert into prc_result_rows(id, group_id, team, kills, placement, penalty, position)
           values (
             (v_r->>'id')::uuid,
             (v_g->>'id')::uuid,
@@ -244,18 +265,18 @@ begin
   end loop;
 
   -- remove groups no longer in the list
-  delete from result_groups
+  delete from prc_result_groups
   where id not in (
     select (x->>'id')::uuid
     from jsonb_array_elements(coalesce(p_data->'results','[]')) x
   );
 
   -- sponsors
-  delete from sponsors;
+  delete from prc_sponsors;
   i := 0;
   for v_s in select * from jsonb_array_elements(coalesce(p_data->'sponsors','[]')) loop
     if coalesce(v_s->>'name','') <> '' or coalesce(v_s->>'logo_url', v_s->>'logo', '') <> '' then
-      insert into sponsors(id, name, logo_url, url, position)
+      insert into prc_sponsors(id, name, logo_url, url, position)
       values (
         (v_s->>'id')::uuid,
         coalesce(v_s->>'name',''),
@@ -271,87 +292,100 @@ end;
 $$;
 
 -- ── Gestión de usuarios ──────────────────────────────────────
-create or replace function staff_create_user(
+create or replace function prc_staff_create_user(
   p_token text, p_username text, p_password text,
   p_display_name text default null, p_role text default 'editor'
-) returns json language plpgsql security definer as $$
+) returns json language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_me json;
-  v_user staff_users;
+  v_user prc_staff_users;
 begin
-  v_me := staff_me(p_token);
+  v_me := prc_staff_me(p_token);
   if v_me->>'role' <> 'admin' then raise exception 'Solo los admins pueden crear usuarios'; end if;
   if length(p_password) < 6 then raise exception 'La clave debe tener al menos 6 caracteres'; end if;
-  insert into staff_users(username, display_name, password_hash, role)
+  insert into prc_staff_users(username, display_name, password_hash, role)
   values(lower(trim(p_username)), p_display_name, crypt(p_password, gen_salt('bf')), p_role)
   returning * into v_user;
   return json_build_object('id', v_user.id, 'username', v_user.username);
 end;
 $$;
 
-create or replace function staff_list_users(p_token text)
-returns json language plpgsql security definer as $$
+create or replace function prc_staff_list_users(p_token text)
+returns json language plpgsql security definer set search_path = public, extensions as $$
 begin
-  perform staff_me(p_token);
+  perform prc_staff_me(p_token);
   return (select json_agg(json_build_object(
     'id', id, 'username', username, 'display_name', display_name,
     'role', role, 'created_at', created_at
-  ) order by created_at) from staff_users);
+  ) order by created_at) from prc_staff_users);
 end;
 $$;
 
-create or replace function staff_update_user(
+create or replace function prc_staff_update_user(
   p_token text, p_id uuid, p_role text, p_password text default null
-) returns void language plpgsql security definer as $$
+) returns void language plpgsql security definer set search_path = public, extensions as $$
 declare v_me json;
 begin
-  v_me := staff_me(p_token);
+  v_me := prc_staff_me(p_token);
   if v_me->>'role' <> 'admin' then raise exception 'Solo los admins pueden modificar usuarios'; end if;
   if p_password is not null then
     if length(p_password) < 6 then raise exception 'La clave debe tener al menos 6 caracteres'; end if;
-    update staff_users set role = p_role, password_hash = crypt(p_password, gen_salt('bf')) where id = p_id;
+    update prc_staff_users set role = p_role, password_hash = crypt(p_password, gen_salt('bf')) where id = p_id;
   else
-    update staff_users set role = p_role where id = p_id;
+    update prc_staff_users set role = p_role where id = p_id;
   end if;
 end;
 $$;
 
-create or replace function staff_delete_user(p_token text, p_id uuid)
-returns void language plpgsql security definer as $$
+create or replace function prc_staff_delete_user(p_token text, p_id uuid)
+returns void language plpgsql security definer set search_path = public, extensions as $$
 declare v_me json;
 begin
-  v_me := staff_me(p_token);
+  v_me := prc_staff_me(p_token);
   if v_me->>'role' <> 'admin' then raise exception 'Solo los admins pueden eliminar usuarios'; end if;
   if (v_me->>'id')::uuid = p_id then raise exception 'No puedes eliminarte a ti mismo'; end if;
-  delete from staff_users where id = p_id;
+  delete from prc_staff_users where id = p_id;
 end;
 $$;
 
-create or replace function staff_change_password(p_token text, p_old text, p_new text)
-returns void language plpgsql security definer as $$
+create or replace function prc_staff_change_password(p_token text, p_old text, p_new text)
+returns void language plpgsql security definer set search_path = public, extensions as $$
 declare
-  v_user staff_users;
+  v_user prc_staff_users;
   v_user_id uuid;
 begin
-  select user_id into v_user_id from staff_sessions where token = p_token and expires_at > now();
+  select user_id into v_user_id from prc_staff_sessions where token = p_token and expires_at > now();
   if not found then raise exception 'Sesión vencida'; end if;
-  select * into v_user from staff_users where id = v_user_id;
+  select * into v_user from prc_staff_users where id = v_user_id;
   if v_user.password_hash <> crypt(p_old, v_user.password_hash) then
     raise exception 'Clave actual incorrecta';
   end if;
   if length(p_new) < 6 then raise exception 'La nueva clave debe tener al menos 6 caracteres'; end if;
-  update staff_users set password_hash = crypt(p_new, gen_salt('bf')) where id = v_user_id;
+  update prc_staff_users set password_hash = crypt(p_new, gen_salt('bf')) where id = v_user_id;
 end;
 $$;
 
 -- ── Limpiar sesiones vencidas (cron opcional) ─────────────────
-create or replace function cleanup_sessions()
-returns void language sql security definer as $$
-  delete from staff_sessions where expires_at < now();
+create or replace function prc_cleanup_sessions()
+returns void language sql security definer set search_path = public, extensions as $$
+  delete from prc_staff_sessions where expires_at < now();
 $$;
+
+-- ============================================================
+-- Storage: imágenes del admin (logos de sponsors y póster)
+-- Bucket público de solo lectura. La escritura la hace únicamente la
+-- Edge Function "pyrocore-upload" (service role) tras validar al staff,
+-- así en la base de datos solo se guarda el enlace, nunca base64.
+-- ============================================================
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('pyrocore', 'pyrocore', true, 2097152, array['image/webp','image/png','image/jpeg'])
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 -- ============================================================
 -- Primer usuario admin (cambia la clave luego desde el panel)
 -- ============================================================
--- insert into staff_users(username, display_name, password_hash, role)
+-- insert into prc_staff_users(username, display_name, password_hash, role)
 -- values('admin', 'Admin', crypt('cambia_esta_clave', gen_salt('bf')), 'admin');

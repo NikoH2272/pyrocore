@@ -7,13 +7,13 @@
   <meta name="description" content="PYROCORE LEAGUE Season 1 — Torneo de Free Fire LATAM, solo móvil. Bring the heat.">
   <meta property="og:title" content="PYROCORE LEAGUE S1 · Free Fire LATAM">
   <meta property="og:description" content="Free Fire LATAM · Solo móvil · Bring the heat.">
-  <meta property="og:image" content="assets/hero.png">
-  <link rel="icon" href="assets/favicon.png">
+  <meta property="og:image" content="assets/logo.png">
+  <link rel="icon" href="assets/logo.png">
   <meta name="theme-color" content="#010401">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=2.0.0">
+  <link rel="stylesheet" href="assets/styles.css?v=2.0.2">
 </head>
 <body>
 
@@ -29,6 +29,7 @@
         <a href="#info">Info</a>
         <a href="#calendario">Calendario</a>
         <a href="#resultados">Resultados</a>
+        <a href="#bienvenida">Bienvenida</a>
         <a href="#comunidad">Comunidad</a>
         <a href="#sponsors">Sponsors</a>
         <a href="#reglamento" class="nav-rules" data-open-rules>Reglamento</a>
@@ -43,7 +44,7 @@
 
       <!-- Art: absolute, right-edge bleed -->
       <div class="hero-art" aria-hidden="true">
-        <img id="hero-img" src="assets/hero.png" alt="PYROCORE LEAGUE S1" width="1071" height="1143">
+        <img id="hero-img" src="assets/logo.png" alt="PYROCORE LEAGUE S1" width="1563" height="1563">
         <span class="side-label">PYROCORE LEAGUE SEASON 1</span>
       </div>
 
@@ -125,15 +126,48 @@
     <!-- ── Resultados ────────────────────────────────────────── -->
     <section class="block" id="resultados">
       <div class="container">
+        <div class="results-board">
+          <div class="section-head sr-only">
+            <div>
+              <span class="eyebrow">Tabla de posiciones</span>
+              <h2>Resultados</h2>
+            </div>
+          </div>
+          <div class="tabs phase-tabs" id="phase-tabs"></div>
+          <div class="tabs" id="result-tabs" role="tablist"></div>
+          <div class="panel corner" id="results"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Bienvenida (generador de imagen por equipo) ───────── -->
+    <section class="block" id="bienvenida">
+      <div class="container">
         <div class="section-head reveal">
           <div>
-            <span class="eyebrow">Tabla de posiciones</span>
-            <h2>Resultados</h2>
+            <span class="eyebrow">Para los equipos</span>
+            <h2>Tu <em>bienvenida</em></h2>
           </div>
         </div>
-        <div class="tabs phase-tabs" id="phase-tabs"></div>
-        <div class="tabs" id="result-tabs" role="tablist"></div>
-        <div class="panel corner" id="results"></div>
+        <div class="welcome-grid">
+          <canvas id="wb-canvas" class="welcome-canvas" aria-label="Vista previa de la imagen de bienvenida"></canvas>
+          <div class="panel corner welcome-panel">
+            <p class="welcome-lead">Sube el logo de tu equipo y descarga tu imagen oficial de bienvenida a la <b>PYROCORE LEAGUE S1</b>, lista para publicar.</p>
+            <label class="welcome-drop" id="wb-drop">
+              <input type="file" id="wb-file" accept="image/*" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M5 20h14"/></svg>
+              <b>Elige o arrastra tu logo</b>
+              <span>También puedes pegarlo con Ctrl+V · PNG sin fondo se ve mejor</span>
+            </label>
+            <div class="field"><label for="wb-name">Nombre del equipo (opcional)</label><input id="wb-name" maxlength="28" placeholder="Ej: PHOENIX RISING" autocomplete="off"></div>
+            <div class="field"><label for="wb-size">Tamaño del logo</label><input id="wb-size" type="range" min="50" max="100" value="100"></div>
+            <p class="welcome-status" id="wb-status" role="status">Tu logo no se sube a ningún servidor: la imagen se crea en tu dispositivo.</p>
+            <div class="cta-row">
+              <button class="btn" type="button" id="wb-download" disabled>Descargar imagen</button>
+              <button class="btn ghost" type="button" id="wb-share" disabled>Compartir</button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -206,10 +240,11 @@
 
   <!-- ── Scripts ───────────────────────────────────────────────── -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-  <script src="assets/config.js?v=2.0.0"></script>
-  <script src="assets/common.js?v=2.0.0"></script>
-  <script src="assets/download.js?v=2.0.0"></script>
+  <script src="assets/config.js?v=2.0.1"></script>
+  <script src="assets/common.js?v=2.0.2"></script>
+  <script src="assets/download.js?v=2.0.1"></script>
   <script src="assets/app.js?v=2.0.0"></script>
+  <script src="assets/welcome.js?v=2.0.1"></script>
   <script src="assets/fx.js?v=2.0.0" defer></script>
 </body>
 </html>
