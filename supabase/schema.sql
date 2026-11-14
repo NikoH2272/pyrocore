@@ -197,7 +197,8 @@ begin
   where id = 1;
 
   -- schedule
-  delete from prc_schedule;
+  -- Reemplazo completo intencional; pg-safeupdate exige un WHERE explícito.
+  delete from prc_schedule where id is not null;
   i := 0;
   for v_m in select * from jsonb_array_elements(coalesce(p_data->'schedule','[]')) loop
     insert into prc_schedule(id, phase, group_name, date, time, rooms, status, visible, note, position)
@@ -272,7 +273,7 @@ begin
   );
 
   -- sponsors
-  delete from prc_sponsors;
+  delete from prc_sponsors where id is not null;
   i := 0;
   for v_s in select * from jsonb_array_elements(coalesce(p_data->'sponsors','[]')) loop
     if coalesce(v_s->>'name','') <> '' or coalesce(v_s->>'logo_url', v_s->>'logo', '') <> '' then
