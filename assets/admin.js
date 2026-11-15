@@ -64,21 +64,25 @@
     img.onerror = () => reject(new Error("Formato de imagen no soportado"));
     img.src = URL.createObjectURL(file);
   });
+  // 1) pide a la base una ruta de subida de un solo uso (valida al staff),
+  // 2) sube el archivo a esa ruta en el bucket público "pyrocore",
+  // 3) devuelve el enlace público. Ver supabase/subida-logos.sql.
+  const BUCKET = "pyrocore";
   const uploadImage = async (file, max, folder) => {
     const blob = await shrink(file, max);
-    const cfg = window.PYROCORE_CONFIG;
-    const form = new FormData();
-    form.append("token", token);
-    form.append("folder", folder);
-    form.append("file", blob, `img.${blob.type === "image/webp" ? "webp" : "png"}`);
-    const res = await fetch(`${cfg.supabaseUrl.replace(/\/$/, "")}/functions/v1/pyrocore-upload`, {
-      method: "POST",
-      headers: { apikey: cfg.supabaseAnonKey, Authorization: `Bearer ${cfg.supabaseAnonKey}` },
-      body: form,
+    const ext = blob.type === "image/webp" ? "webp" : blob.type === "image/jpeg" ? "jpg" : "png";
+    let path;
+    try {
+      path = await rpc("prc_staff_upload_ticket", { p_folder: folder, p_ext: ext });
+    } catch (err) {
+      if (/prc_staff_upload_ticket/.test(err.message)) throw new Error("Falta ejecutar supabase/subida-logos.sql en Supabase");
+      throw err;
+    }
+    const { error } = await sb.storage.from(BUCKET).upload(path, blob, {
+      contentType: blob.type, cacheControl: "31536000", upsert: false,
     });
-    const out = await res.json().catch(() => ({}));
-    if (!res.ok || !out.url) throw new Error(out.error || `Error al subir (${res.status})`);
-    return out.url;
+    if (error) throw new Error(error.message);
+    return sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
   };
 
   const normalize = (d) => {

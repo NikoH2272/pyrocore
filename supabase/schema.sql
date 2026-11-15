@@ -374,16 +374,9 @@ $$;
 
 -- ============================================================
 -- Storage: imágenes del admin (logos de sponsors y póster)
--- Bucket público de solo lectura. La escritura la hace únicamente la
--- Edge Function "pyrocore-upload" (service role) tras validar al staff,
--- así en la base de datos solo se guarda el enlace, nunca base64.
+-- El bucket, los permisos de subida y sus políticas están en
+-- supabase/subida-logos.sql — ejecútalo después de este archivo.
 -- ============================================================
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('pyrocore', 'pyrocore', true, 2097152, array['image/webp','image/png','image/jpeg'])
-on conflict (id) do update set
-  public = excluded.public,
-  file_size_limit = excluded.file_size_limit,
-  allowed_mime_types = excluded.allowed_mime_types;
 
 -- ============================================================
 -- Primer usuario admin (cambia la clave luego desde el panel)

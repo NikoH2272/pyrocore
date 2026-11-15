@@ -12,7 +12,8 @@ const PYROCORE = (() => {
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : "");
-  const safeImg = (u) => (/^(https?:\/\/|data:image\/|assets\/)/i.test(u || "") ? u : "");
+  // Solo enlaces (Storage o archivos del sitio). Nunca base64: pesa en la base y en cada carga.
+  const safeImg = (u) => (/^(https?:\/\/|assets\/)/i.test(u || "") ? u : "");
 
   const sb = (() => {
     const c = window.PYROCORE_CONFIG || {};
