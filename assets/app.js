@@ -31,11 +31,8 @@
   badge.textContent = STATES[state];
   badge.className = `kicker state-${state}`;
 
-  // Resultados: solo se muestran cuando el cronograma tiene al menos una fecha
-  // en vivo o finalizada (antes de jugar no hay nada que publicar).
+  // El botón de la portada lleva a resultados cuando ya hay fechas jugadas.
   const played = (data.schedule || []).some((m) => m.visible !== false && (m.status === "envivo" || m.status === "finalizado"));
-  $("#resultados").hidden = !played;
-  document.querySelectorAll('.nav a[href="#resultados"]').forEach((a) => { a.hidden = !played; });
 
   const cta = [];
   if (state === "abierto" && safeUrl(L.registration)) cta.push(`<a class="btn" href="${esc(L.registration)}" target="_blank" rel="noopener">${ICONS.form} Inscribir equipo</a>`);
