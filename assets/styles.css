@@ -281,29 +281,6 @@ section.block { padding: 88px 0 20px; scroll-margin-top: 66px; }
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
-/* Results board — poster art (1080×1350) as backdrop, sliced in three:
-   top (title band, 320px) and bottom (sponsor strip, 250px) keep their
-   proportions; the dark middle covers (crops, never distorts) however tall
-   the table is.
-   Padding % is relative to width, so it tracks the art at any size. */
-.results-board {
-  position: relative;
-  aspect-ratio: 1080 / 1350;
-  max-width: 920px; margin: 0 auto;
-  padding: 27.5% 6.5% 21%;
-  background:
-    url("resultados-top.jpg") center top / 100% auto no-repeat,
-    url("resultados-bot.jpg") center bottom / 100% auto no-repeat,
-    url("resultados-mid.jpg") center / cover no-repeat,
-    #010401;
-  border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: 0 24px 64px rgba(0,0,0,.5);
-}
-.results-board > * { position: relative; }
-.results-board #results { background: rgba(1,4,1,.72); }
-@media (max-width: 640px) {
-  .results-board { padding: 28% 4.5% 22%; border-radius: 12px; }
-}
 
 /* Welcome generator */
 .welcome-grid { display: grid; grid-template-columns: minmax(0, 440px) minmax(0, 1fr); gap: 28px; align-items: start; }
